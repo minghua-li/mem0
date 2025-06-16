@@ -1,7 +1,7 @@
 .PHONY: help up down logs shell migrate test test-clean env ui-install ui-start ui-dev ui-build ui-dev-start
 
-NEXT_PUBLIC_USER_ID=$(USER)
-NEXT_PUBLIC_API_URL=http://localhost:8765
+export NEXT_PUBLIC_USER_ID=$(USER)
+export NEXT_PUBLIC_API_URL=http://localhost:8765
 
 # Default target
 help:
@@ -32,6 +32,12 @@ up:
 down:
 	docker compose down -v
 	rm -f api/openmemory.db
+
+rebuild-run:
+	docker compose down -v
+	rm -f api/openmemory.db
+	docker compose build
+	NEXT_PUBLIC_USER_ID=$(USER) NEXT_PUBLIC_API_URL=$(NEXT_PUBLIC_API_URL) docker compose up
 
 logs:
 	docker compose logs -f

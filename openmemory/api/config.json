@@ -1,19 +1,20 @@
 {
     "mem0": {
         "llm": {
-            "provider": "openai",
+            "provider": "alibaba",
             "config": {
-                "model": "gpt-4o-mini",
+                "model": "qwen-max",
                 "temperature": 0.1,
                 "max_tokens": 2000,
-                "api_key": "env:API_KEY"
+                "api_key": "env:ALIYUN_API_KEY"
             }
         },
         "embedder": {
-            "provider": "openai",
+            "provider": "alibaba",
             "config": {
-                "model": "text-embedding-3-small",
-                "api_key": "env:API_KEY"
+                "model": "text-embedding-v4",
+                "embedding_dims": 1024,
+                "api_key": "env:ALIYUN_API_KEY"
             }
         }
     }

@@ -27,6 +27,7 @@ class LlmConfig(BaseModel):
             "sarvam",
             "lmstudio",
             "langchain",
+            "alibaba",
         ):
             return v
         else:
