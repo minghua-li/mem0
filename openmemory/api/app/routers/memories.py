@@ -247,7 +247,8 @@ async def create_memory(
             metadata={
                 "source_app": "openmemory",
                 "mcp_client": request.app,
-            }
+            },
+            infer=request.infer # Added infer parameter from the request
         )
         
         # Log the response for debugging

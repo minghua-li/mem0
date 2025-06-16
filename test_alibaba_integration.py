@@ -8,6 +8,8 @@ without requiring the full mem0 package to be installed.
 
 import os
 import sys
+import requests # Added import for requests
+import json # Added import for json
 
 # Add the current directory to Python path so we can import our modules
 sys.path.insert(0, '/Users/apple/Documents/dockers/openmemory/mem0')
@@ -66,7 +68,7 @@ def test_alibaba_embedding():
         # Create config
         config = BaseEmbedderConfig(
             model="text-embedding-v4",
-            embedding_dims=1024,
+            embedding_dims=1536,  # Ensure this is 1536
             api_key=os.getenv("ALIYUN_API_KEY") or "dummy_key_for_testing"
         )
         
@@ -93,6 +95,44 @@ def test_alibaba_embedding():
         print(f"❌ Failed to test Alibaba Embedding: {e}")
         import traceback
         traceback.print_exc()
+
+def test_create_memory_api():
+    """Test the create memory API endpoint"""
+    print("\\n=== Testing Create Memory API ===")
+    url = "http://localhost:8765/api/v1/memories/"
+    payload = {
+        "user_id": "apple", # You can change this if needed
+        "text": "hello world",
+        "infer": False, # Changed back to False to test direct embedding
+        "app": "openmemory"
+    }
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    print(f"   Sending POST request to: {url}")
+    print(f"   Payload: {json.dumps(payload)}")
+
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        print(f"   Response Status Code: {response.status_code}")
+        try:
+            response_json = response.json()
+            print(f"   Response JSON: {json.dumps(response_json, ensure_ascii=False)}")
+            if response_json is None and response.status_code == 200:
+                print("   ⚠️  API returned null, which might indicate an issue as discussed.")
+            elif response.status_code == 200 and response_json is not None:
+                 print("✅ API call successful, received non-null JSON response.")
+            else:
+                print(f"❌ API call returned status {response.status_code}")
+
+        except json.JSONDecodeError:
+            print(f"   Response Content (not JSON): {response.text}")
+            print("❌ API call did not return valid JSON.")
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ API call failed: {e}")
+        print("   Ensure the OpenMemory API server is running at http://localhost:8765")
 
 def test_factory_registration():
     """Test that the factories can find our implementations"""
@@ -121,50 +161,51 @@ def test_factory_registration():
         traceback.print_exc()
 
 def main():
-    print("Alibaba Cloud DashScope Integration Test")
-    print("========================================")
-    
+    # print("Alibaba Cloud DashScope Integration Test")
+    # print("========================================")
+
     # Check if API key is available
     api_key = os.getenv("ALIYUN_API_KEY")
-    if api_key:
-        print(f"✅ ALIYUN_API_KEY found (length: {len(api_key)})")
-    else:
-        print("⚠️  ALIYUN_API_KEY not set - API calls will be skipped")
-        print("   To test API calls, set: export ALIYUN_API_KEY='your_key'")
-    
+    # if api_key:
+    #     print(f"✅ ALIYUN_API_KEY found (length: {len(api_key)})")
+    # else:
+    #     print("⚠️  ALIYUN_API_KEY not set - API calls will be skipped")
+    #     print("   To test API calls, set: export ALIYUN_API_KEY=\'your_key\'")
+
     # Check if dashscope is installed
     try:
         import dashscope
-        try:
-            version = dashscope.__version__
-            print(f"✅ DashScope SDK installed (version: {version})")
-        except AttributeError:
-            print("✅ DashScope SDK installed (version info not available)")
+        # try:
+        #     version = dashscope.__version__
+        #     print(f"✅ DashScope SDK installed (version: {version})")
+        # except AttributeError:
+        #     print("✅ DashScope SDK installed (version info not available)")
     except ImportError:
-        print("❌ DashScope SDK not installed")
+        print("❌ DashScope SDK not installed. This test requires it.")
         print("   Install with: pip install dashscope")
         return
     
     # Run tests
-    test_factory_registration()
-    test_alibaba_llm()
-    test_alibaba_embedding()
-    
-    print("\n=== Test Summary ===")
-    print("✅ Integration files created successfully")
-    print("✅ Factory registration working")
-    print("✅ Classes can be imported and initialized")
-    
-    if api_key:
-        print("✅ API integration tested")
-    else:
-        print("⚠️  Set ALIYUN_API_KEY to test API integration")
-    
-    print("\n=== Next Steps ===")
-    print("1. Set your DashScope API key: export ALIYUN_API_KEY='your_key'")
-    print("2. Install mem0 in development mode or use the configuration files")
-    print("3. Use the example configuration in configs/alibaba_config.yaml")
-    print("4. Refer to docs/alibaba_integration.md for detailed usage")
+    # test_factory_registration()
+    # test_alibaba_llm()
+    # test_alibaba_embedding()
+    test_create_memory_api() # Added call to the new test function
+
+    # print("\\\\n=== Test Summary ===")
+    # print("✅ Integration files created successfully")
+    # print("✅ Factory registration working")
+    # print("✅ Classes can be imported and initialized")
+
+    # if api_key:
+    #     print("✅ API integration tested")
+    # else:
+    #     print("⚠️  Set ALIYUN_API_KEY to test API integration")
+
+    # print("\\n=== Next Steps ===")
+    # print("1. Set your DashScope API key: export ALIYUN_API_KEY=\'your_key\'")
+    # print("2. Install mem0 in development mode or use the configuration files")
+    # print("3. Use the example configuration in configs/alibaba_config.yaml")
+    # print("4. Refer to docs/alibaba_integration.md for detailed usage")
 
 if __name__ == "__main__":
     main()

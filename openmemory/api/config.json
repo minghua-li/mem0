@@ -13,7 +13,7 @@
             "provider": "alibaba",
             "config": {
                 "model": "text-embedding-v4",
-                "embedding_dims": 1024,
+                "embedding_dims": 1536,
                 "api_key": "env:ALIYUN_API_KEY"
             }
         }

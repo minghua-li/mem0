@@ -280,7 +280,9 @@ class Memory(MemoryBase):
         return {"results": vector_store_result}
 
     def _add_to_vector_store(self, messages, metadata, filters, infer):
+        logger.debug(f"Memory._add_to_vector_store: ENTERED method. Received infer={infer}")
         if not infer:
+            logger.debug("Memory._add_to_vector_store: infer is False. Processing direct add path.")
             returned_memories = []
             for message_dict in messages:
                 if (
@@ -288,10 +290,11 @@ class Memory(MemoryBase):
                     or message_dict.get("role") is None
                     or message_dict.get("content") is None
                 ):
-                    logger.warning(f"Skipping invalid message format: {message_dict}")
+                    logger.warning(f"Memory._add_to_vector_store (infer=False): Skipping invalid message format: {str(message_dict)[:200]}")
                     continue
 
                 if message_dict["role"] == "system":
+                    logger.debug(f"Memory._add_to_vector_store (infer=False): Skipping system message: {str(message_dict)[:200]}")
                     continue
 
                 per_msg_meta = deepcopy(metadata)
@@ -302,7 +305,21 @@ class Memory(MemoryBase):
                     per_msg_meta["actor_id"] = actor_name
 
                 msg_content = message_dict["content"]
+                logger.debug(f"Memory._add_to_vector_store (infer=False): Attempting to embed content: '{str(msg_content)[:100]}...' for role: {message_dict['role']}")
+
+                # ---- Manually added logs by user's request ----
+                logger.debug(f"!!!!!! BEFORE self.embedding_model.embed for: {msg_content}")
+                print(f"!!!!!! DEBUG PRINT: BEFORE self.embedding_model.embed for: {msg_content}")
+                # ---- End of manually added logs ----
+
                 msg_embeddings = self.embedding_model.embed(msg_content, "add")
+
+                # ---- Manually added logs by user's request ----
+                logger.debug(f"!!!!!! AFTER self.embedding_model.embed. Result type: {type(msg_embeddings)}, Length: {len(msg_embeddings) if msg_embeddings is not None else 'N/A'}")
+                print(f"!!!!!! DEBUG PRINT: AFTER self.embedding_model.embed. Result type: {type(msg_embeddings)}, Length: {len(msg_embeddings) if msg_embeddings is not None else 'N/A'}")
+                # ---- End of manually added logs ----
+
+                logger.debug(f"Memory._add_to_vector_store (infer=False): Embedding successful for '{str(msg_content)[:100]}...'. Embedding vector length (first 5): {str(msg_embeddings[:5]) if msg_embeddings else 'None'}")
                 mem_id = self._create_memory(msg_content, msg_embeddings, per_msg_meta)
 
                 returned_memories.append(
@@ -314,8 +331,11 @@ class Memory(MemoryBase):
                         "role": message_dict["role"],
                     }
                 )
+            logger.debug(f"Memory._add_to_vector_store (infer=False): Exiting. Returning {len(returned_memories)} memories.")
             return returned_memories
 
+        # This is the 'if infer:' block (i.e., infer is True)
+        logger.debug("Memory._add_to_vector_store: infer is True. Processing fact extraction and update logic.")
         parsed_messages = parse_messages(messages)
 
         if self.config.custom_fact_extraction_prompt:
@@ -1112,7 +1132,9 @@ class AsyncMemory(MemoryBase):
         effective_filters: dict,
         infer: bool,
     ):
+        logger.debug(f"Memory._add_to_vector_store: ENTERED method. Received infer={infer}")
         if not infer:
+            logger.debug("Memory._add_to_vector_store: infer is False. Processing direct add path.")
             returned_memories = []
             for message_dict in messages:
                 if (
@@ -1120,10 +1142,11 @@ class AsyncMemory(MemoryBase):
                     or message_dict.get("role") is None
                     or message_dict.get("content") is None
                 ):
-                    logger.warning(f"Skipping invalid message format (async): {message_dict}")
+                    logger.warning(f"Memory._add_to_vector_store (infer=False): Skipping invalid message format: {str(message_dict)[:200]}")
                     continue
 
                 if message_dict["role"] == "system":
+                    logger.debug(f"Memory._add_to_vector_store (infer=False): Skipping system message: {str(message_dict)[:200]}")
                     continue
 
                 per_msg_meta = deepcopy(metadata)
@@ -1134,8 +1157,22 @@ class AsyncMemory(MemoryBase):
                     per_msg_meta["actor_id"] = actor_name
 
                 msg_content = message_dict["content"]
-                msg_embeddings = await asyncio.to_thread(self.embedding_model.embed, msg_content, "add")
-                mem_id = await self._create_memory(msg_content, msg_embeddings, per_msg_meta)
+                logger.debug(f"Memory._add_to_vector_store (infer=False): Attempting to embed content: '{str(msg_content)[:100]}...' for role: {message_dict['role']}")
+
+                # ---- Manually added logs by user's request ----
+                logger.debug(f"!!!!!! BEFORE self.embedding_model.embed for: {msg_content}")
+                print(f"!!!!!! DEBUG PRINT: BEFORE self.embedding_model.embed for: {msg_content}")
+                # ---- End of manually added logs ----
+
+                msg_embeddings = self.embedding_model.embed(msg_content, "add")
+
+                # ---- Manually added logs by user's request ----
+                logger.debug(f"!!!!!! AFTER self.embedding_model.embed. Result type: {type(msg_embeddings)}, Length: {len(msg_embeddings) if msg_embeddings is not None else 'N/A'}")
+                print(f"!!!!!! DEBUG PRINT: AFTER self.embedding_model.embed. Result type: {type(msg_embeddings)}, Length: {len(msg_embeddings) if msg_embeddings is not None else 'N/A'}")
+                # ---- End of manually added logs ----
+
+                logger.debug(f"Memory._add_to_vector_store (infer=False): Embedding successful for '{str(msg_content)[:100]}...'. Embedding vector length (first 5): {str(msg_embeddings[:5]) if msg_embeddings else 'None'}")
+                mem_id = self._create_memory(msg_content, msg_embeddings, per_msg_meta)
 
                 returned_memories.append(
                     {
@@ -1146,9 +1183,13 @@ class AsyncMemory(MemoryBase):
                         "role": message_dict["role"],
                     }
                 )
+            logger.debug(f"Memory._add_to_vector_store (infer=False): Exiting. Returning {len(returned_memories)} memories.")
             return returned_memories
 
+        # This is the 'if infer:' block (i.e., infer is True)
+        logger.debug("Memory._add_to_vector_store: infer is True. Processing fact extraction and update logic.")
         parsed_messages = parse_messages(messages)
+
         if self.config.custom_fact_extraction_prompt:
             system_prompt = self.config.custom_fact_extraction_prompt
             user_prompt = f"Input:\n{parsed_messages}"

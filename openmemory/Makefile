@@ -27,7 +27,7 @@ build:
 	docker compose build
 
 up:
-	NEXT_PUBLIC_USER_ID=$(USER) NEXT_PUBLIC_API_URL=$(NEXT_PUBLIC_API_URL) docker compose up
+	NEXT_PUBLIC_USER_ID=$(USER) NEXT_PUBLIC_API_URL=$(NEXT_PUBLIC_API_URL) docker compose up -d
 
 down:
 	docker compose down -v
@@ -36,8 +36,9 @@ down:
 rebuild-run:
 	docker compose down -v
 	rm -f api/openmemory.db
-	docker compose build
-	NEXT_PUBLIC_USER_ID=$(USER) NEXT_PUBLIC_API_URL=$(NEXT_PUBLIC_API_URL) docker compose up
+	docker compose build --no-cache
+	NEXT_PUBLIC_USER_ID=$(USER) NEXT_PUBLIC_API_URL=$(NEXT_PUBLIC_API_URL) docker compose up -d
+	docker compose logs -f openmemory-mcp
 
 logs:
 	docker compose logs -f

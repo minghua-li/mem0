@@ -10,6 +10,17 @@ from app.models import User, App, Config as ConfigModel
 from uuid import uuid4
 from app.config import USER_ID, DEFAULT_APP_ID
 import datetime
+import logging # Added logging
+
+# Configure logging
+log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+# Set default to INFO for most things, but DEBUG for mem0
+logging.basicConfig(level=logging.INFO, format=log_format)
+logging.getLogger("mem0").setLevel(logging.DEBUG)
+# For even more specific debugging of the alibaba embedder:
+logging.getLogger("mem0.embeddings.alibaba").setLevel(logging.DEBUG)
+# For debugging the mem0 memory main logic:
+logging.getLogger("mem0.memory.main").setLevel(logging.DEBUG)
 
 app = FastAPI(title="OpenMemory API")
 
