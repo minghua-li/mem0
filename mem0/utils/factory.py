@@ -30,6 +30,7 @@ class LlmFactory:
         "sarvam": "mem0.llms.sarvam.SarvamLLM",
         "lmstudio": "mem0.llms.lmstudio.LMStudioLLM",
         "langchain": "mem0.llms.langchain.LangchainLLM",
+        "alibaba": "mem0.llms.alibaba.AlibabaDashScopeLLM",
     }
 
     @classmethod
@@ -55,6 +56,7 @@ class EmbedderFactory:
         "lmstudio": "mem0.embeddings.lmstudio.LMStudioEmbedding",
         "langchain": "mem0.embeddings.langchain.LangchainEmbedding",
         "aws_bedrock": "mem0.embeddings.aws_bedrock.AWSBedrockEmbedding",
+        "alibaba": "mem0.embeddings.alibaba.AlibabaDashScopeEmbedding",
     }
 
     @classmethod

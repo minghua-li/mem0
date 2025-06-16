@@ -1,0 +1,25 @@
+# Alibaba Cloud DashScope Configuration
+# This configuration uses Alibaba Cloud's qwen-plus LLM and text-embedding-v4 embedding model
+
+llm:
+  provider: alibaba
+  config:
+    model: qwen-plus  # Available models: qwen-plus, qwen-turbo, qwen-max, etc.
+    temperature: 0.1
+    max_tokens: 2000
+    top_p: 0.8
+    api_key: env:ALIYUN_API_KEY  # Set your DashScope API key as environment variable
+
+embedder:
+  provider: alibaba
+  config:
+    model: text-embedding-v4  # Alibaba's latest embedding model
+    embedding_dims: 1024  # text-embedding-v4 produces 1024-dimensional vectors
+    api_key: env:ALIYUN_API_KEY  # Same API key for both LLM and embedding
+
+# Vector store configuration (optional)
+vector_store:
+  provider: qdrant  # You can use any supported vector store
+  config:
+    collection_name: mem0_alibaba
+    embedding_model_dims: 1024  # Must match the embedding dimensions

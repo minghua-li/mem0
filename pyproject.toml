@@ -43,6 +43,7 @@ llms = [
     "ollama>=0.1.0",
     "vertexai>=0.1.0",
     "google-generativeai>=0.3.0",
+    "dashscope>=1.14.0",
 ]
 extras = [
     "boto3>=1.34.0",
