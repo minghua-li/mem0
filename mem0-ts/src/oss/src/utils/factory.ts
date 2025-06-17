@@ -31,6 +31,8 @@ import { AzureOpenAIEmbedder } from "../embeddings/azure";
 import { LangchainLLM } from "../llms/langchain";
 import { LangchainEmbedder } from "../embeddings/langchain";
 import { LangchainVectorStore } from "../vector_stores/langchain";
+import { AlibabaLLM } from "../llms/alibaba";
+import { AlibabaEmbedder } from "../embeddings/alibaba";
 
 export class EmbedderFactory {
   static create(provider: string, config: EmbeddingConfig): Embedder {
@@ -45,6 +47,8 @@ export class EmbedderFactory {
         return new AzureOpenAIEmbedder(config);
       case "langchain":
         return new LangchainEmbedder(config);
+      case "alibaba":
+        return new AlibabaEmbedder(config);
       default:
         throw new Error(`Unsupported embedder provider: ${provider}`);
     }
@@ -72,6 +76,8 @@ export class LLMFactory {
         return new MistralLLM(config);
       case "langchain":
         return new LangchainLLM(config);
+      case "alibaba":
+        return new AlibabaLLM(config);
       default:
         throw new Error(`Unsupported LLM provider: ${provider}`);
     }

@@ -6,10 +6,14 @@ services:
     volumes:
       - mem0_storage:/mem0/storage
   openmemory-mcp:
-    image: mem0/openmemory-mcp
+#    image: mem0/openmemory-mcp:latest
     build:
       context: ../
       dockerfile: openmemory/api/Dockerfile
+    deploy:
+      resources:
+        limits:
+          memory: 32G
     environment:
       - USER
       - API_KEY
@@ -27,12 +31,15 @@ services:
     build:
       context: ui/
       dockerfile: Dockerfile
-    image: mem0/openmemory-ui:latest
+#    image: mem0/openmemory-ui:latest
+    deploy:
+      resources:
+        limits:
+          memory: 8G
     ports:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
       - NEXT_PUBLIC_USER_ID=${USER}
-
 volumes:
   mem0_storage:

@@ -27,7 +27,7 @@ build:
 	docker compose build
 
 up:
-	NEXT_PUBLIC_USER_ID=$(USER) NEXT_PUBLIC_API_URL=$(NEXT_PUBLIC_API_URL) docker compose up -d
+	NEXT_PUBLIC_USER_ID=$(USER) NEXT_PUBLIC_API_URL=$(NEXT_PUBLIC_API_URL) docker compose up -d --build
 
 down:
 	docker compose down -v
