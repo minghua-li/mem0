@@ -32,12 +32,38 @@ import uuid
 import datetime
 from app.utils.permissions import check_memory_access_permissions
 from qdrant_client import models as qdrant_models
+import asyncio
+import threading
+from queue import Queue, Empty
+from dataclasses import dataclass
+from typing import Dict, Any, Optional
 
 # Load environment variables
 load_dotenv()
 
 # Initialize MCP
 mcp = FastMCP("mem0-mcp-server")
+
+# Memory add task data structure
+@dataclass
+class MemoryAddTask:
+    text: str
+    user_id: str
+    client_name: str
+    user_db_id: int
+    app_db_id: int
+    task_id: str
+    metadata: Dict[str, Any]
+    
+# Global queue for memory add tasks
+memory_add_queue = Queue()
+
+# Task status tracking
+task_status: Dict[str, Dict[str, Any]] = {}
+
+# Background worker thread
+worker_thread: Optional[threading.Thread] = None
+worker_running = False
 
 # Don't initialize memory client at import time - do it lazily when needed
 def get_memory_client_safe():
@@ -47,6 +73,158 @@ def get_memory_client_safe():
     except Exception as e:
         logging.warning(f"Failed to get memory client: {e}")
         return None
+
+def process_memory_add_task(task: MemoryAddTask):
+    """Process a single memory add task."""
+    try:
+        # Update task status
+        task_status[task.task_id] = {
+            "status": "processing",
+            "started_at": datetime.datetime.now(datetime.UTC)
+        }
+        
+        # Get memory client
+        memory_client = get_memory_client_safe()
+        if not memory_client:
+            task_status[task.task_id] = {
+                "status": "failed",
+                "error": "Memory client unavailable",
+                "completed_at": datetime.datetime.now(datetime.UTC)
+            }
+            return
+        
+        # Call memory_client.add
+        response = memory_client.add(
+            task.text,
+            user_id=task.user_id,
+            metadata=task.metadata
+        )
+        
+        # Process the response and update database
+        db = SessionLocal()
+        try:
+            if isinstance(response, dict) and 'results' in response:
+                for result in response['results']:
+                    memory_id = uuid.UUID(result['id'])
+                    memory = db.query(Memory).filter(Memory.id == memory_id).first()
+
+                    if result['event'] == 'ADD':
+                        if not memory:
+                            memory = Memory(
+                                id=memory_id,
+                                user_id=task.user_db_id,
+                                app_id=task.app_db_id,
+                                content=result['memory'],
+                                state=MemoryState.active
+                            )
+                            db.add(memory)
+                        else:
+                            memory.state = MemoryState.active
+                            memory.content = result['memory']
+
+                        # Create history entry
+                        old_state = None
+                        if memory and hasattr(memory, 'state'):
+                            old_state = memory.state
+                        history = MemoryStatusHistory(
+                            memory_id=memory_id,
+                            changed_by=task.user_db_id,
+                            old_state=old_state,
+                            new_state=MemoryState.active
+                        )
+                        db.add(history)
+
+                    elif result['event'] == 'DELETE':
+                        if memory:
+                            memory.state = MemoryState.deleted
+                            memory.deleted_at = datetime.datetime.now(datetime.UTC)
+                            # Create history entry
+                            history = MemoryStatusHistory(
+                                memory_id=memory_id,
+                                changed_by=task.user_db_id,
+                                old_state=MemoryState.active,
+                                new_state=MemoryState.deleted
+                            )
+                            db.add(history)
+
+                db.commit()
+            
+            # Update task status with success
+            task_status[task.task_id] = {
+                "status": "completed",
+                "response": response,
+                "completed_at": datetime.datetime.now(datetime.UTC)
+            }
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logging.exception(f"Error processing memory add task {task.task_id}: {e}")
+        task_status[task.task_id] = {
+            "status": "failed",
+            "error": str(e),
+            "completed_at": datetime.datetime.now(datetime.UTC)
+        }
+
+def memory_worker():
+    """Background worker that processes memory add tasks from the queue."""
+    global worker_running
+    worker_running = True
+    
+    while worker_running:
+        try:
+            # Get task from queue with timeout
+            task = memory_add_queue.get(timeout=1.0)
+            if task is None:  # Shutdown signal
+                break
+                
+            process_memory_add_task(task)
+            memory_add_queue.task_done()
+            
+        except Empty:
+            # Timeout occurred, continue the loop
+            continue
+        except Exception as e:
+            if worker_running:  # Only log if we're still supposed to be running
+                logging.exception(f"Error in memory worker: {e}")
+            continue
+    
+    logging.info("Memory worker thread stopped")
+
+def start_memory_worker():
+    """Start the background memory worker thread."""
+    global worker_thread, worker_running
+    
+    if worker_thread is None or not worker_thread.is_alive():
+        worker_running = True
+        worker_thread = threading.Thread(target=memory_worker, daemon=True)
+        worker_thread.start()
+        logging.info("Memory worker thread started")
+
+def stop_memory_worker():
+    """Stop the background memory worker thread."""
+    global worker_running
+    
+    worker_running = False
+    if worker_thread and worker_thread.is_alive():
+        # Send shutdown signal
+        memory_add_queue.put(None)
+        worker_thread.join(timeout=5.0)
+        logging.info("Memory worker thread stopped")
+
+def cleanup_old_task_status():
+    """Clean up old task status entries to prevent memory leaks."""
+    cutoff_time = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)
+    to_remove = []
+    
+    for task_id, status in task_status.items():
+        completed_at = status.get('completed_at')
+        if completed_at and completed_at < cutoff_time:
+            to_remove.append(task_id)
+    
+    for task_id in to_remove:
+        del task_status[task_id]
 
 # Context variables for user_id and client_name
 user_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("user_id")
@@ -68,11 +246,6 @@ async def add_memories(text: str) -> str:
     if not client_name:
         return "Error: client_name not provided"
 
-    # Get memory client safely
-    memory_client = get_memory_client_safe()
-    if not memory_client:
-        return "Error: Memory system is currently unavailable. Please try again later."
-
     try:
         db = SessionLocal()
         try:
@@ -83,63 +256,70 @@ async def add_memories(text: str) -> str:
             if not app.is_active:
                 return f"Error: App {app.name} is currently paused on OpenMemory. Cannot create new memories."
 
-            response = memory_client.add(text,
-                                         user_id=uid,
-                                         metadata={
-                                            "source_app": "openmemory",
-                                            "mcp_client": client_name,
-                                        })
-
-            # Process the response and update database
-            if isinstance(response, dict) and 'results' in response:
-                for result in response['results']:
-                    memory_id = uuid.UUID(result['id'])
-                    memory = db.query(Memory).filter(Memory.id == memory_id).first()
-
-                    if result['event'] == 'ADD':
-                        if not memory:
-                            memory = Memory(
-                                id=memory_id,
-                                user_id=user.id,
-                                app_id=app.id,
-                                content=result['memory'],
-                                state=MemoryState.active
-                            )
-                            db.add(memory)
-                        else:
-                            memory.state = MemoryState.active
-                            memory.content = result['memory']
-
-                        # Create history entry
-                        history = MemoryStatusHistory(
-                            memory_id=memory_id,
-                            changed_by=user.id,
-                            old_state=MemoryState.deleted if memory else None,
-                            new_state=MemoryState.active
-                        )
-                        db.add(history)
-
-                    elif result['event'] == 'DELETE':
-                        if memory:
-                            memory.state = MemoryState.deleted
-                            memory.deleted_at = datetime.datetime.now(datetime.UTC)
-                            # Create history entry
-                            history = MemoryStatusHistory(
-                                memory_id=memory_id,
-                                changed_by=user.id,
-                                old_state=MemoryState.active,
-                                new_state=MemoryState.deleted
-                            )
-                            db.add(history)
-
-                db.commit()
-
-            return response
+            # Generate unique task ID
+            task_id = str(uuid.uuid4())
+            
+            # Create memory add task
+            task = MemoryAddTask(
+                text=text,
+                user_id=uid,
+                client_name=client_name,
+                user_db_id=user.id,
+                app_db_id=app.id,
+                task_id=task_id,
+                metadata={
+                    "source_app": "openmemory",
+                    "mcp_client": client_name,
+                }
+            )
+            
+            # Initialize task status
+            task_status[task_id] = {
+                "status": "queued",
+                "created_at": datetime.datetime.now(datetime.UTC)
+            }
+            
+            # Ensure worker is running
+            start_memory_worker()
+            
+            # Add task to queue
+            memory_add_queue.put(task)
+            
+            # Clean up old task status entries periodically
+            cleanup_old_task_status()
+            
+            return json.dumps({
+                "status": "queued",
+                "task_id": task_id,
+                "message": "Memory add request has been queued for processing"
+            })
+            
         finally:
             db.close()
     except Exception as e:
-        logging.exception(f"Error adding to memory: {e}")
-        return f"Error adding to memory: {e}"
+        logging.exception(f"Error queuing memory add task: {e}")
+        return f"Error queuing memory add task: {e}"
+
+
+@mcp.tool(description="Check the status of a memory add task")
+async def check_memory_task_status(task_id: str) -> str:
+    """Check the status of a memory add task by task ID."""
+    if task_id not in task_status:
+        return json.dumps({
+            "error": "Task not found",
+            "task_id": task_id
+        })
+    
+    status = task_status[task_id]
+    return json.dumps({
+        "task_id": task_id,
+        "status": status["status"],
+        "created_at": status.get("created_at", "").isoformat() if status.get("created_at") else None,
+        "started_at": status.get("started_at", "").isoformat() if status.get("started_at") else None,
+        "completed_at": status.get("completed_at", "").isoformat() if status.get("completed_at") else None,
+        "error": status.get("error"),
+        "response": status.get("response")
+    })
 
 
 @mcp.tool(description="Search through stored memories. This method is called EVERYTIME the user asks anything.")
@@ -437,5 +617,13 @@ def setup_mcp_server(app: FastAPI):
     """Setup MCP server with the FastAPI application"""
     mcp._mcp_server.name = f"mem0-mcp-server"
 
+    # Start the memory worker thread
+    start_memory_worker()
+    
     # Include MCP router in the FastAPI app
     app.include_router(mcp_router)
+    
+    # Add shutdown handler to stop worker thread
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        stop_memory_worker()
